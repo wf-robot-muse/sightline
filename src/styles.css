@@ -87,3 +87,171 @@ button:active {
     background-color: #0f0f0f69;
   }
 }
+
+/* SightLine Phase 2 MVP layout */
+#app {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 1.2em 1em 3em;
+}
+
+#app header h1 {
+  margin-bottom: 0.1em;
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+  margin: 1em 0;
+}
+
+.nav-btn.active {
+  border-color: #396cd8;
+  background-color: #dce8fb;
+}
+
+.notice {
+  border: 1px solid #396cd8;
+  border-radius: 8px;
+  padding: 0.6em 0.9em;
+  background: #eef4fd;
+}
+
+.view {
+  display: flex;
+  flex-direction: column;
+  gap: 1em;
+}
+
+.card {
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 1em 1.2em;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
+  text-align: left;
+}
+
+.card h2 {
+  margin-top: 0;
+  font-size: 1.15em;
+}
+
+.tier {
+  font-size: 1.5em;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.tier-green { color: #1c7a35; }
+.tier-yellow { color: #9a7b00; }
+.tier-red { color: #b3261e; }
+
+.session-kind {
+  font-size: 1.2em;
+  font-weight: 600;
+}
+
+.signal {
+  color: #444;
+  font-size: 0.95em;
+  margin: 0.35em 0;
+}
+
+.warn {
+  color: #b3261e;
+  font-weight: 600;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7em;
+  align-items: flex-start;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25em;
+  font-size: 0.95em;
+}
+
+.field input,
+.field select {
+  border-radius: 8px;
+  border: 1px solid #bbb;
+  padding: 0.5em 0.7em;
+  font-size: 1em;
+  font-family: inherit;
+  background: #fff;
+  color: #0f0f0f;
+}
+
+.items,
+.week {
+  list-style: none;
+  padding: 0;
+  margin: 0.5em 0;
+}
+
+.items li,
+.week li {
+  padding: 0.35em 0;
+  border-bottom: 1px solid #eee;
+}
+
+.items li button {
+  padding: 0.25em 0.7em;
+  font-size: 0.9em;
+}
+
+.check {
+  display: inline-block;
+  margin-right: 0.8em;
+}
+
+.file-btn {
+  display: inline-block;
+  cursor: pointer;
+  border: 1px solid #bbb;
+  border-radius: 8px;
+  padding: 0.6em 1.2em;
+  background: #fff;
+  font-weight: 500;
+}
+
+.file-btn input[type="file"] {
+  display: none;
+}
+
+fieldset {
+  border: 1px solid #ccc;
+  border-radius: 8px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .card {
+    background: #3a3a3a;
+  }
+  .signal {
+    color: #ccc;
+  }
+  .items li,
+  .week li {
+    border-bottom-color: #555;
+  }
+  .notice {
+    background: #24344d;
+  }
+  .nav-btn.active {
+    background-color: #24344d;
+  }
+  .field input,
+  .field select,
+  .file-btn {
+    background: #2b2b2b;
+    color: #f6f6f6;
+    border-color: #666;
+  }
+}

@@ -2,7 +2,7 @@
 
 SightLine is a personalized health and training app: it builds daily workout, activity, and nutrition recommendations from the user's own health data and goals, weighted by the priority the user sets, and replans on the fly as conditions change.
 
-**Status:** Development framework scaffold (Phase 0). The design spec is approved (v1.0, 2026-11-18) and is the build reference. The spec itself is maintained outside this public repo.
+**Status:** Phase 2 MVP (v0.2.0). Phase 1 delivered the engine (canonical data model, adapters, readiness, weighted goals, planner, nutrition) with its test suite and a backtest against real recorded data. Phase 2 adds the desktop app: Today (readiness, session, nutrition targets, week), Goals & weights, Check-ins, Fasting log, Injury log, Equipment, Data (manual entry + Garmin/Teladoc/Cronometer imports), and Settings — all local-first, all data on the user's machine. The design spec is approved (v1.0, 2026-11-18) and is the build reference. The spec itself is maintained outside this public repo.
 
 ## Layout
 
@@ -17,7 +17,7 @@ SightLine is a personalized health and training app: it builds daily workout, ac
 |---|---|
 | App identifier | `com.wf.robot.muse.sightline` |
 | Product name | `SightLine` |
-| Window | 800 × 600, title `SightLine` |
+| Window | 1024 × 720, title `SightLine` |
 
 ## Principles (from the approved spec)
 

@@ -199,11 +199,18 @@ export function computeReadiness(
 
   // Injury splits (§4/§7): affected patterns are red while the injury
   // is in stage 1 (settle), capped at yellow in stage 2 (reload),
-  // and unrestricted in stage 3 (return).
+  // and unrestricted in stage 3 (return). Red-flag symptoms (§7.3)
+  // override the stage: the app stops programming for the affected
+  // patterns entirely and directs the user to in-person evaluation.
   const perPattern: Partial<Record<MovementPattern, Tier>> = {};
   for (const injury of injuries) {
     if (injury.status === "resolved") continue;
-    const cap: Tier = injury.stage === 1 ? "red" : injury.stage === 2 ? "yellow" : tier;
+    const cap: Tier =
+      injury.redFlags.length > 0 || injury.stage === 1
+        ? "red"
+        : injury.stage === 2
+          ? "yellow"
+          : tier;
     for (const pattern of injury.affectedPatterns) {
       const existing = perPattern[pattern];
       if (!existing || cap === "red" || (cap === "yellow" && existing === "green")) {

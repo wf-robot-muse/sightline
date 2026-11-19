@@ -17,7 +17,7 @@
 import type { NormalizedGoal } from "./goals.ts";
 import { scoreCandidate } from "./goals.ts";
 import type { EngineInputs, MovementPattern } from "./model.ts";
-import type { ReadinessResult } from "./readiness.ts";
+import type { ReadinessResult, Tier } from "./readiness.ts";
 import { computeReadiness } from "./readiness.ts";
 
 export type SessionKind =
@@ -115,12 +115,30 @@ export function planWeek(
       reasons.push("Readiness green: full menu (§4).");
     }
 
+    // Check-in gating (§5): a stiff back reported today reshapes
+    // today. Back stiffness >= 7 removes hinge/core work outright;
+    // 5–6 caps it at moderate. The reason is stated on the session.
+    const checkIn = inputs.checkIns.find((c) => c.date === date);
+    const effectiveCaps: Partial<Record<MovementPattern, Tier>> = { ...dayReadiness.perPattern };
+    if (checkIn && checkIn.backStiffness !== null && checkIn.backStiffness >= 5) {
+      const cap: Tier = checkIn.backStiffness >= 7 ? "red" : "yellow";
+      for (const p of ["hinge", "core-stability"] as MovementPattern[]) {
+        const existing = effectiveCaps[p];
+        if (!existing || cap === "red" || (cap === "yellow" && existing === "green")) {
+          effectiveCaps[p] = cap;
+        }
+      }
+      reasons.push(
+        `Back stiffness ${checkIn.backStiffness}/10 reported: hinge and core work ${cap === "red" ? "removed" : "capped at moderate"} today (§5).`,
+      );
+    }
+
     const candidates = SESSION_TEMPLATES.filter((t) => allowed.includes(t.kind))
       .filter((t) => {
         // Injury gating (§7.2): a pattern capped red is out entirely;
         // a pattern capped yellow removes hard sessions using it.
         return t.patterns.every((p) => {
-          const cap = dayReadiness.perPattern[p];
+          const cap = effectiveCaps[p];
           if (cap === "red") return false;
           if (cap === "yellow" && HARD_KINDS.includes(t.kind)) return false;
           return true;

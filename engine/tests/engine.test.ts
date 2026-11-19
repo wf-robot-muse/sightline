@@ -179,6 +179,35 @@ test("planner: hinge injury removes the hinge/core session from a green day", ()
   assert.notEqual(monday.kind, "strength-hinge-core");
 });
 
+test("planner: back stiffness 7 in today's check-in removes hinge work and says why", () => {
+  const goals = normalizeGoals([goal("lower-back", 60), goal("fat-loss", 40)]);
+  const inputs = emptyInputs({
+    observations: [...baselineDays("2026-01-12", 28, goodDay), ...goodDay("2026-01-12")],
+    checkIns: [{
+      date: "2026-01-12", soreness: null, backStiffness: 7, mood: null, sessionRpe: null,
+      note: null, provenance: { source: "in-app-log", recordedAt: "2026-01-12", enteredAt: ENTERED },
+    }],
+  });
+  const { sessions } = planWeek(inputs, goals, "2026-01-12");
+  const monday = sessions.find((s) => s.date === "2026-01-12");
+  assert.ok(monday);
+  assert.notEqual(monday.kind, "strength-hinge-core");
+  assert.ok(monday.reasons.some((r) => r.includes("Back stiffness 7/10")));
+});
+
+test("readiness: red-flag symptoms cap affected patterns red regardless of stage", () => {
+  const injury: InjuryRecord = {
+    id: "i2", bodyArea: "lower back", side: "na", onsetDate: "2026-01-09",
+    onsetDescription: "crept up", pain0to10: 5, worseWith: "sitting", betterWith: "walking",
+    affectedPatterns: ["hinge"], status: "recovering", stage: 3, redFlags: ["radiating pain"],
+    professionalNotes: null,
+    provenance: { source: "in-app-log", recordedAt: "2026-01-09", enteredAt: ENTERED },
+  };
+  const observations = [...baselineDays("2026-01-10", 28, goodDay), ...goodDay("2026-01-10")];
+  const r = computeReadiness(observations, [], [injury], "2026-01-10");
+  assert.equal(r.perPattern.hinge, "red");
+});
+
 test("coaching voice: statements are observation/benchmark/labeled opinion only", () => {
   const text = formatStatement({
     observation: "HRV 36 ms against a 7-day average of 47 ms.",

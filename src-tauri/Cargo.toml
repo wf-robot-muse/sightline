@@ -1,6 +1,6 @@
 [package]
 name = "sightline"
-version = "0.1.0"
+version = "0.2.0"
 description = "Tauri desktop foundation - Windows, macOS, Linux x64 and Linux ARM64 (Raspberry Pi)"
 authors = ["WF-Robot Muse"]
 edition = "2021"
