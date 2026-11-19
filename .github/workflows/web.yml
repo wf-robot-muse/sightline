@@ -1,0 +1,56 @@
+name: Web (GitHub Pages)
+
+# The SightLine frontend is platform-independent (no Tauri APIs in
+# src/), so the same build that ships in the desktop apps is also
+# published as a web app on GitHub Pages. Data stays in the
+# visitor's own browser storage — nothing is uploaded anywhere.
+# The only difference from the desktop build is the asset base path
+# (relative, so Pages can serve it from the /sightline/ subpath).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build web app (relative asset base for Pages subpath)
+        run: npx tsc && npx vite build --base ./
+
+      - name: Set up Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

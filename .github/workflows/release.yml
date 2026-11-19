@@ -1,0 +1,117 @@
+name: Release
+
+# Desktop releases for Windows and macOS, published to a GitHub
+# Release when a version tag is pushed. The web release is separate
+# (web.yml, GitHub Pages).
+#
+# Windows signing follows the standing project pattern: the
+# encrypted PFX is committed at signing/wade-feltman-codesign.pfx;
+# only its password is a repo secret (WINDOWS_CERT_PASSWORD). The
+# build fails if the secret is missing, and the signer's SHA-256
+# fingerprint is verified against the published fingerprint after
+# signing. The signature is tamper evidence from the project owner —
+# it is not a Microsoft-trusted certificate, so SmartScreen may
+# still warn on other machines.
+#
+# macOS builds are unsigned (no Apple Developer Program membership);
+# Gatekeeper will require a right-click Open on first launch.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Release (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Tauri app (NSIS)
+        run: npx tauri build --bundles nsis
+
+      - name: Sign the installer (self-signed certificate)
+        shell: pwsh
+        env:
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+          EXPECTED_FINGERPRINT: "AF:FA:FC:91:08:15:72:F0:81:C9:F0:78:3A:59:59:5E:61:F4:BE:00:D8:F3:77:CA:55:82:DD:3D:52:CE:62:B3"
+        run: |
+          if (-not $env:WINDOWS_CERT_PASSWORD) {
+            Write-Error "WINDOWS_CERT_PASSWORD secret is not set"
+            exit 1
+          }
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $signtool) { Write-Error "signtool.exe not found"; exit 1 }
+          $installer = Get-ChildItem "src-tauri\target\release\bundle\nsis\*-setup.exe" |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $installer) { Write-Error "NSIS installer not found"; exit 1 }
+          & $signtool sign /f signing\wade-feltman-codesign.pfx /p $env:WINDOWS_CERT_PASSWORD `
+            /fd sha256 /tr http://timestamp.digicert.com /td sha256 $installer
+          if ($LASTEXITCODE -ne 0) { Write-Error "signtool failed"; exit 1 }
+          $sig = Get-AuthenticodeSignature $installer
+          $hash = $sig.SignerCertificate.GetCertHashString(
+            [System.Security.Cryptography.HashAlgorithmName]::SHA256)
+          $actual = ($hash -replace '..(?!$)', '$&:').ToUpper()
+          Write-Host "Signer SHA-256 fingerprint: $actual"
+          if ($actual -ne $env:EXPECTED_FINGERPRINT) {
+            Write-Error "Signer fingerprint does not match the published fingerprint"
+            exit 1
+          }
+          Write-Host "Signed installer: $installer"
+
+      - name: Publish to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: src-tauri/target/release/bundle/nsis/*-setup.exe
+          fail_on_unmatched_files: true
+
+  macos:
+    name: Release (macOS)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Tauri app (DMG)
+        run: npx tauri build --bundles dmg
+
+      - name: Publish to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: src-tauri/target/release/bundle/dmg/*.dmg
+          fail_on_unmatched_files: true

@@ -2,7 +2,13 @@
 
 SightLine is a personalized health and training app: it builds daily workout, activity, and nutrition recommendations from the user's own health data and goals, weighted by the priority the user sets, and replans on the fly as conditions change.
 
-**Status:** Phase 2 MVP (v0.2.0). Phase 1 delivered the engine (canonical data model, adapters, readiness, weighted goals, planner, nutrition) with its test suite and a backtest against real recorded data. Phase 2 adds the desktop app: Today (readiness, session, nutrition targets, week), Goals & weights, Check-ins, Fasting log, Injury log, Equipment, Data (manual entry + Garmin/Teladoc/Cronometer imports), and Settings — all local-first, all data on the user's machine. The design spec is approved (v1.0, 2026-11-18) and is the build reference. The spec itself is maintained outside this public repo.
+**Status:** Phase 4 (v0.4.0) — shadow mode and releases. Phase 1 delivered the engine (canonical data model, adapters, readiness, weighted goals, planner, nutrition) with its test suite and a backtest against real recorded data. Phase 2 added the desktop app (Today, Goals & weights, Check-ins, Fasting log, Injury log, Equipment, Data, Settings). Phase 3 added workout export (FIT), injury staged return paths, and nutrition scoring. Phase 4 adds shadow mode (the app recommends, the user trains as they choose, and the app compares and tunes) and the release pipelines below. All local-first; all data stays on the user's machine. The design spec is approved (v1.0, 2026-11-18) and is the build reference. The spec itself is maintained outside this public repo.
+
+## Releases
+
+- **Windows** — NSIS installer attached to each versioned GitHub Release, Authenticode-signed with the project owner's self-signed certificate (SHA-256 fingerprint `AF:FA:FC:91:08:15:72:F0:81:C9:F0:78:3A:59:59:5E:61:F4:BE:00:D8:F3:77:CA:55:82:DD:3D:52:CE:62:B3`). A self-signed signature is tamper evidence, not Microsoft trust — SmartScreen may still warn.
+- **macOS** — DMG (Apple Silicon) attached to each GitHub Release, unsigned; first launch needs a right-click Open.
+- **Web** — the same build published on GitHub Pages at https://wf-robot-muse.github.io/sightline/ — data stays in the visitor's own browser storage.
 
 ## Layout
 

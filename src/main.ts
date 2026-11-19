@@ -1,4 +1,4 @@
-// SightLine app shell (Phase 3).
+// SightLine app shell (Phase 4).
 //
 // Screens: Today, Goals, Check-ins, Fasting, Injuries, Equipment,
 // Data, Settings. All logic comes from the platform-independent
@@ -27,6 +27,7 @@ import {
   resolveObservations,
   scoreNutritionWeek,
   sessionToWorkout,
+  shadowWeek,
   teladocExtractionToCanonical,
   validatePainReport,
   workoutCard,
@@ -37,6 +38,7 @@ import type {
   InjuryRecord,
   MetricKind,
   MovementPattern,
+  WorkoutRecord,
 } from "../engine/src/index.ts";
 import { emptyStore, loadStore, mondayOf, newId, saveStore, todayLocal } from "./store.ts";
 import type { AppStore } from "./store.ts";
@@ -784,6 +786,67 @@ function viewSettings(root: HTMLElement): void {
   );
 }
 
+// ---------- Shadow mode (Phase 4) ----------
+
+let shadowWeekOffset = 0; // 0 = this week, -1 = last week
+
+function viewShadow(root: HTMLElement): void {
+  const today = todayLocal();
+  const thisMonday = mondayOf(today);
+  const mondayDate = new Date(`${thisMonday}T00:00:00Z`);
+  mondayDate.setUTCDate(mondayDate.getUTCDate() + shadowWeekOffset * 7);
+  const weekStart = mondayDate.toISOString().slice(0, 10);
+  const report = shadowWeek(store, normalizeGoals(store.goals), weekStart, today);
+
+  root.append(
+    card(
+      `Shadow mode — week of ${weekStart}`,
+      h("p", { class: "signal" }, "Shadow mode: the app recommends, you train as you choose. This compares the two — it grades the recommendations, not you. Weekly review tunes the app's thresholds."),
+      h("div", { class: "form" },
+        button("This week", () => { shadowWeekOffset = 0; render(); }),
+        button("Last week", () => { shadowWeekOffset = -1; render(); }),
+      ),
+      h("ul", { class: "week" }, ...report.days.map((d) =>
+        h("li", {},
+          `${d.date}: planned ${d.planned ? `${d.planned.kind} ${d.planned.durationMin} min` : "—"} · actual ${d.actualKinds.length > 0 ? d.actualKinds.join(", ") : "—"} · ${d.outcome} · readiness ${d.readinessTier}`,
+        ),
+      )),
+      ...report.lines.map((l) => h("p", { class: "signal" }, l)),
+    ),
+  );
+
+  const kind = selectInput([["run", "run"], ["strength", "strength"], ["ride", "ride"], ["walk", "walk"], ["mobility", "mobility"], ["other", "other"]], "run");
+  const duration = numInput("30", "1");
+  const date = dateInput(today);
+  root.append(
+    card(
+      "Log an actual workout",
+      h("p", { class: "signal" }, "For sessions that did not arrive by import. Shadow comparison reads these the same way."),
+      h("div", { class: "form" },
+        labeledInput("Date", date),
+        labeledInput("Kind", kind),
+        labeledInput("Duration (min)", duration),
+        button("Log workout", () => {
+          const mins = Number(duration.value);
+          if (!Number.isFinite(mins) || mins <= 0 || mins > 1440) return setNotice("Duration must be 1–1440 minutes.");
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(date.value)) return setNotice("Date is required.");
+          store.workouts.push({
+            id: newId("workout"),
+            kind: kind.value as WorkoutRecord["kind"],
+            startAt: `${date.value}T12:00:00Z`,
+            durationMin: mins,
+            distanceKm: null,
+            load: mins,
+            provenance: prov("in-app-log", date.value),
+          });
+          save();
+          setNotice("Workout logged. Shadow comparison updated.");
+        }),
+      ),
+    ),
+  );
+}
+
 // ---------- Shell ----------
 
 const VIEWS: [string, string, (root: HTMLElement) => void][] = [
@@ -794,6 +857,7 @@ const VIEWS: [string, string, (root: HTMLElement) => void][] = [
   ["injuries", "Injuries", viewInjuries],
   ["equipment", "Equipment", viewEquipment],
   ["data", "Data", viewData],
+  ["shadow", "Shadow", viewShadow],
   ["settings", "Settings", viewSettings],
 ];
 
