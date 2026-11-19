@@ -30,6 +30,8 @@ import {
   shadowWeek,
   teladocExtractionToCanonical,
   validatePainReport,
+  weightToKg,
+  weightUnit,
   workoutCard,
   METRIC_RANGES,
 } from "../engine/src/index.ts";
@@ -155,7 +157,7 @@ function viewToday(root: HTMLElement): void {
         h("p", { class: "session-kind" }, `${todaysSession.kind} — ${todaysSession.durationMin} min`),
         ...todaysSession.reasons.map((r) => h("p", { class: "signal" }, r)),
         workout
-          ? h("pre", { class: "workout-card" }, workoutCard(workout))
+          ? h("pre", { class: "workout-card" }, workoutCard(workout, store.units))
           : h("p", { class: "signal" }, "Practice session — not a workout, no export."),
         workout
           ? button("Download FIT workout file (for GARMIN/NewFiles)", () => {
@@ -180,7 +182,7 @@ function viewToday(root: HTMLElement): void {
     .filter((o) => o.metric === "weight-kg")
     .sort((a, b) => a.date.localeCompare(b.date))
     .pop();
-  const expenditure = estimateExpenditure(store.observations, store.nutrition);
+  const expenditure = estimateExpenditure(store.observations, store.nutrition, store.units);
   const fastingToday = store.fasts.some(
     (f) => f.startedAt.slice(0, 10) <= today && (f.endedAt === null || f.endedAt.slice(0, 10) >= today),
   );
@@ -627,7 +629,7 @@ function viewData(root: HTMLElement): void {
       .filter((o) => o.metric === "weight-kg")
       .sort((a, b) => a.date.localeCompare(b.date))
       .pop();
-    const expenditure = estimateExpenditure(store.observations, store.nutrition);
+    const expenditure = estimateExpenditure(store.observations, store.nutrition, store.units);
     const targets = computeNutritionTargets({
       goals: normalizeGoals(store.goals),
       bodyWeightKg: latestWeight ? latestWeight.value : null,
@@ -650,7 +652,33 @@ function viewData(root: HTMLElement): void {
     }
   }
 
-  const metric = selectInput(Object.keys(METRIC_RANGES).map((m) => [m, m] as [string, string]), "weight-kg");
+  // Friendly names in the user's unit system (Wade's fix,
+  // 2026-11-19): the canonical metric ids stay internal. Weight is
+  // entered in lb under imperial and converted to kg for storage.
+  const metricLabels: Record<string, string> = {
+    "weight-kg": `Weight (${weightUnit(store.units)})`,
+    "resting-hr-bpm": "Resting heart rate (bpm)",
+    "hrv-ms": "HRV (ms)",
+    "hrv-status": "HRV status (0-3)",
+    "sleep-duration-min": "Sleep duration (min)",
+    "sleep-score": "Sleep score (0-100)",
+    "sleep-need-min": "Sleep need (min)",
+    "body-battery-peak": "Body Battery peak (0-100)",
+    "body-battery-low": "Body Battery low (0-100)",
+    steps: "Steps",
+    "spo2-pct": "SpO2 (%)",
+    "stress-avg": "Stress average (0-100)",
+    "respiration-brpm": "Respiration (breaths/min)",
+    "active-kcal": "Active calories (kcal)",
+    "total-kcal": "Total calories (kcal)",
+    "bp-systolic": "Blood pressure systolic (mmHg)",
+    "bp-diastolic": "Blood pressure diastolic (mmHg)",
+    "heart-rate-bpm": "Heart rate (bpm)",
+  };
+  const metric = selectInput(
+    Object.keys(METRIC_RANGES).map((m) => [m, metricLabels[m] ?? m] as [string, string]),
+    "weight-kg",
+  );
   const value = numInput();
   const date = dateInput(todayLocal());
   root.append(
@@ -663,8 +691,10 @@ function viewData(root: HTMLElement): void {
         labeledInput("Date", date),
         button("Add entry", () => {
           try {
+            const entered = Number(value.value);
+            const canonical = metric.value === "weight-kg" ? weightToKg(entered, store.units) : entered;
             const [obs] = manualObservations(
-              [{ metric: metric.value as MetricKind, value: Number(value.value), date: date.value }],
+              [{ metric: metric.value as MetricKind, value: canonical, date: date.value }],
               nowIso(),
             );
             store.observations.push(obs);
@@ -739,6 +769,22 @@ function download(filename: string, text: string): void {
 }
 
 function viewSettings(root: HTMLElement): void {
+  const unitsSel = selectInput(
+    [["imperial", "Imperial (lb, miles)"], ["metric", "Metric (kg, km)"]],
+    store.units,
+  );
+  unitsSel.addEventListener("change", () => {
+    store.units = unitsSel.value === "metric" ? "metric" : "imperial";
+    save();
+    setNotice(`Units set to ${store.units}: entry fields and displayed weights and distances now use ${store.units} units.`);
+  });
+  root.append(
+    card(
+      "Units",
+      h("div", { class: "form" }, labeledInput("Unit system", unitsSel)),
+      h("p", { class: "signal" }, "Stored data does not change: conversion happens only where you enter or read values."),
+    ),
+  );
   root.append(
     card(
       "Settings",

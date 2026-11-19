@@ -7,12 +7,16 @@
 // on load. Anything that does not match the expected shape is
 // dropped and counted, never trusted silently.
 
-import type { EngineInputs, PainReport } from "../engine/src/index.ts";
+import type { EngineInputs, PainReport, UnitSystem } from "../engine/src/index.ts";
 
 export interface AppStore extends EngineInputs {
   version: 1;
   /** Per-injury pain reports driving stage assessment (§7.2). */
   injuryReports: PainReport[];
+  /** Display/entry unit system. Canonical data stays metric; this
+   *  only changes what the user sees and types (Wade's fix,
+   *  2026-11-19: default imperial — he asked for imperial). */
+  units: UnitSystem;
 }
 
 const KEY = "sightline.store.v1";
@@ -30,6 +34,7 @@ export function emptyStore(): AppStore {
     goals: [],
     equipment: [],
     injuryReports: [],
+    units: "imperial",
   };
 }
 
@@ -93,6 +98,7 @@ export function loadStore(): LoadResult {
       isRecord(o) && isStr(o.injuryId) && isStr(o.date) &&
       isNum(o.painDuring) && o.painDuring >= 0 && o.painDuring <= 10 &&
       isNum(o.painNextMorning) && o.painNextMorning >= 0 && o.painNextMorning <= 10),
+    units: parsed.units === "metric" ? "metric" : "imperial",
   };
 
   const after = (["observations", "bloodPressure", "workouts", "nutrition", "fasts", "checkIns", "injuries", "goals", "equipment"] as const)

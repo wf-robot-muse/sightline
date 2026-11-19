@@ -62,3 +62,52 @@ test("shadow week reports training on red days as a tuning question, not a grade
   const report = shadowWeek(inputs([workout("2026-11-16", "run")]), goals, "2026-11-16", "2026-11-22");
   assert.ok(report.lines.some((l) => l.includes("red readiness tier")));
 });
+
+test("units: workout card renders imperial distances and paces only on request", async () => {
+  const { workoutCard, fmtWeight, weightToKg } = await import("../src/index.ts");
+  const run = {
+    id: "w-units",
+    name: "Easy Run",
+    sport: "running" as const,
+    repeats: [],
+    steps: [{
+      name: "Run",
+      kind: "active" as const,
+      durationSec: null,
+      distanceM: 5000,
+      reps: null,
+      target: { type: "pace" as const, secPerKm: 300 },
+      exerciseName: null,
+    }],
+  };
+  const metric = workoutCard(run, "metric");
+  assert.match(metric, /5\.00 km/);
+  assert.match(metric, /5:00\/km/);
+  const imperial = workoutCard(run, "imperial");
+  assert.match(imperial, /3\.11 mi/);
+  assert.match(imperial, /8:03\/mi/);
+  // Default stays metric so stored text and older callers are unchanged.
+  assert.equal(workoutCard(run), metric);
+  assert.equal(fmtWeight(95.8, "imperial"), "211.2 lb");
+  assert.equal(fmtWeight(95.8, "metric"), "95.8 kg");
+  assert.ok(Math.abs(weightToKg(211.2, "imperial") - 95.8) < 0.05);
+  assert.equal(weightToKg(95.8, "metric"), 95.8);
+});
+
+test("units: expenditure detail reports weight change in the caller's units", async () => {
+  const { estimateExpenditure } = await import("../src/index.ts");
+  const prov = { source: "manual" as const, recordedAt: "2026-01-01T00:00:00Z", enteredAt: "2026-01-01T00:00:00Z" };
+  const observations = [
+    { metric: "weight-kg" as const, value: 100, date: "2026-01-01", provenance: prov },
+    { metric: "weight-kg" as const, value: 99, date: "2026-01-15", provenance: prov },
+  ];
+  const nutrition = Array.from({ length: 10 }, (_, i) => ({
+    date: `2026-01-${String(2 + i).padStart(2, "0")}`,
+    kcal: 2000, proteinG: null, carbsNetG: null, fatG: null, fiberG: null,
+    sodiumMg: null, potassiumMg: null, magnesiumMg: null, calciumMg: null,
+    vitaminDIu: null, omega3G: null,
+    provenance: { source: "cronometer-csv" as const, recordedAt: "2026-01-02T00:00:00Z", enteredAt: "2026-01-02T00:00:00Z" },
+  }));
+  assert.match(estimateExpenditure(observations, nutrition, "metric").detail, /-1\.0 kg/);
+  assert.match(estimateExpenditure(observations, nutrition, "imperial").detail, /-2\.2 lb/);
+});

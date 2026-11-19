@@ -12,6 +12,8 @@ import type { NormalizedGoal } from "./goals.ts";
 import { resolveEnergyMode } from "./goals.ts";
 import type { NutritionDay, Observation } from "./model.ts";
 import { dailySeries, resolveObservations } from "./priority.ts";
+import { fmtWeightDelta } from "./units.ts";
+import type { UnitSystem } from "./units.ts";
 
 const KCAL_PER_KG = 7700;
 const LB_PER_KG = 2.20462;
@@ -28,6 +30,7 @@ export interface ExpenditureEstimate {
 export function estimateExpenditure(
   observations: Observation[],
   nutrition: NutritionDay[],
+  units: UnitSystem = "metric",
 ): ExpenditureEstimate {
   const weights = dailySeries(resolveObservations(observations), "weight-kg");
   if (weights.length < 2) {
@@ -53,7 +56,7 @@ export function estimateExpenditure(
     kcalPerDay: Math.round(expenditure),
     detail:
       `Estimated from ${logged.length} logged days (mean intake ${Math.round(meanIntake)} kcal) and a ` +
-      `weight change of ${weightDeltaKg.toFixed(1)} kg over ${days} days.`,
+      `weight change of ${fmtWeightDelta(weightDeltaKg, units)} over ${days} days.`,
   };
 }
 

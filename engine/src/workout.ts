@@ -6,6 +6,8 @@
 // always available for manual sessions.
 
 import type { PlannedSession } from "./planner.ts";
+import { fmtDistanceM, fmtPace } from "./units.ts";
+import type { UnitSystem } from "./units.ts";
 
 export type WorkoutSport = "running" | "strength" | "walking" | "generic";
 
@@ -128,28 +130,30 @@ export function sessionToWorkout(session: PlannedSession): NeutralWorkout | null
   }
 }
 
-function targetText(t: StepTarget): string {
+function targetText(t: StepTarget, units: UnitSystem): string {
   switch (t.type) {
     case "hr-zone": return `Zone ${t.zone}`;
     case "hr-range": return `${t.lowBpm}–${t.highBpm} bpm`;
-    case "pace": return `${Math.floor(t.secPerKm / 60)}:${String(t.secPerKm % 60).padStart(2, "0")}/km`;
+    case "pace": return fmtPace(t.secPerKm, units);
     case "none": return "";
   }
 }
 
-function endText(s: WorkoutStep): string {
+function endText(s: WorkoutStep, units: UnitSystem): string {
   if (s.durationSec !== null) return `${Math.floor(s.durationSec / 60)}:${String(s.durationSec % 60).padStart(2, "0")}`;
-  if (s.distanceM !== null) return `${(s.distanceM / 1000).toFixed(2)} km`;
+  if (s.distanceM !== null) return fmtDistanceM(s.distanceM, units);
   if (s.reps !== null) return `${s.reps} reps`;
   return "open";
 }
 
-/** The human-readable card: always produced, whatever exporter runs. */
-export function workoutCard(w: NeutralWorkout): string {
+/** The human-readable card: always produced, whatever exporter runs.
+ *  Distances and paces render in the caller's unit system; the
+ *  workout itself stays canonical metric. */
+export function workoutCard(w: NeutralWorkout, units: UnitSystem = "metric"): string {
   const lines = [w.name, `Sport: ${w.sport}`, ""];
   w.steps.forEach((s, i) => {
-    const t = targetText(s.target);
-    lines.push(`${i + 1}. ${s.name} — ${endText(s)}${t ? ` @ ${t}` : ""}`);
+    const t = targetText(s.target, units);
+    lines.push(`${i + 1}. ${s.name} — ${endText(s, units)}${t ? ` @ ${t}` : ""}`);
     const repeat = w.repeats.find((r) => r.afterStep === i);
     if (repeat) lines.push(`   (steps ${i - repeat.stepCount + 2}–${i + 1} repeat ${repeat.times} more times)`);
   });
