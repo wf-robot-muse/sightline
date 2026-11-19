@@ -7,10 +7,12 @@
 // on load. Anything that does not match the expected shape is
 // dropped and counted, never trusted silently.
 
-import type { EngineInputs } from "../engine/src/index.ts";
+import type { EngineInputs, PainReport } from "../engine/src/index.ts";
 
 export interface AppStore extends EngineInputs {
   version: 1;
+  /** Per-injury pain reports driving stage assessment (§7.2). */
+  injuryReports: PainReport[];
 }
 
 const KEY = "sightline.store.v1";
@@ -27,6 +29,7 @@ export function emptyStore(): AppStore {
     injuries: [],
     goals: [],
     equipment: [],
+    injuryReports: [],
   };
 }
 
@@ -86,6 +89,10 @@ export function loadStore(): LoadResult {
       isRecord(o) && isStr(o.id) && isStr(o.type) && isNum(o.weight) && typeof o.active === "boolean"),
     equipment: validArray(parsed.equipment, (o): o is AppStore["equipment"][number] =>
       isRecord(o) && isStr(o.id) && isStr(o.name) && isRecord(o.provenance)),
+    injuryReports: validArray(parsed.injuryReports, (o): o is PainReport =>
+      isRecord(o) && isStr(o.injuryId) && isStr(o.date) &&
+      isNum(o.painDuring) && o.painDuring >= 0 && o.painDuring <= 10 &&
+      isNum(o.painNextMorning) && o.painNextMorning >= 0 && o.painNextMorning <= 10),
   };
 
   const after = (["observations", "bloodPressure", "workouts", "nutrition", "fasts", "checkIns", "injuries", "goals", "equipment"] as const)

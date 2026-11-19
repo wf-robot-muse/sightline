@@ -155,3 +155,111 @@ export function computeNutritionTargets(args: {
   );
   return { mode: "fed", kcal, proteinG, carbsNetG, fatG, micros, trackedFocus, detail };
 }
+
+// ---- Scoring logged days against targets (Phase 3) ----
+
+export type NutrientStatus = "met" | "low" | "high" | "not-logged";
+
+export interface NutrientScore {
+  nutrient: string;
+  actual: number | null;
+  target: number | null;
+  unit: string;
+  status: NutrientStatus;
+  note: string;
+}
+
+const within = (actual: number, target: number, tolerance: number) =>
+  actual >= target * (1 - tolerance) && actual <= target * (1 + tolerance);
+
+/** Score one logged day against fed-day targets. A nutrient absent
+ *  from the log scores "not-logged", never zero (§3.1 partial
+ *  coverage). Scoring against fasting-day targets is not attempted:
+ *  the day is reported as a fasting day instead. */
+export function scoreNutritionDay(day: NutritionDay, targets: NutritionTargets): NutrientScore[] {
+  if (targets.mode === "fasting") return [];
+  const scores: NutrientScore[] = [];
+  const macro = (
+    nutrient: string,
+    actual: number | null | undefined,
+    target: number | null,
+    unit: string,
+    opts: { ceiling?: boolean; tolerance?: number } = {},
+  ) => {
+    if (actual === null || actual === undefined) {
+      scores.push({ nutrient, actual: null, target, unit, status: "not-logged", note: "Not present in the day's log." });
+      return;
+    }
+    if (target === null) {
+      scores.push({ nutrient, actual, target: null, unit, status: "not-logged", note: "No target computed for this day." });
+      return;
+    }
+    let status: NutrientStatus;
+    let note: string;
+    if (opts.ceiling) {
+      status = actual <= target ? "met" : "high";
+      note = status === "met" ? `At or under the ${target} ${unit} ceiling.` : `${actual - target} ${unit} over the ceiling.`;
+    } else if (within(actual, target, opts.tolerance ?? 0.1)) {
+      status = "met"; note = "Within 10% of target.";
+    } else if (actual < target) {
+      status = "low"; note = `${target - actual} ${unit} under target.`;
+    } else {
+      status = "high"; note = `${actual - target} ${unit} over target.`;
+    }
+    scores.push({ nutrient, actual, target, unit, status, note });
+  };
+
+  macro("Energy", day.kcal, targets.kcal, "kcal");
+  macro("Protein", day.proteinG, targets.proteinG, "g");
+  macro("Net carbs", day.carbsNetG, targets.carbsNetG, "g", { ceiling: true });
+  macro("Fat", day.fatG, targets.fatG, "g");
+
+  const micro = (
+    nutrient: string,
+    actual: number | null | undefined,
+    lo: number,
+    hi: number | null,
+    unit: string,
+  ) => {
+    if (actual === null || actual === undefined) {
+      scores.push({ nutrient, actual: null, target: lo, unit, status: "not-logged", note: "Not present in the day's log." });
+      return;
+    }
+    const status: NutrientStatus = actual < lo ? "low" : hi !== null && actual > hi ? "high" : "met";
+    const note =
+      status === "met"
+        ? hi !== null ? `Inside the ${lo}–${hi} ${unit} range.` : `At or over the ${lo} ${unit} floor.`
+        : status === "low" ? `Under the ${lo} ${unit} floor.` : `Over the ${hi} ${unit} ceiling.`;
+    scores.push({ nutrient, actual, target: lo, unit, status, note });
+  };
+  const m = targets.micros;
+  micro("Fiber", day.fiberG, m.fiberG[0], m.fiberG[1], "g");
+  micro("Sodium", day.sodiumMg, m.sodiumMg[0], m.sodiumMg[1], "mg");
+  micro("Potassium", day.potassiumMg, m.potassiumMg[0], m.potassiumMg[1], "mg");
+  micro("Magnesium", day.magnesiumMg, m.magnesiumMg[0], m.magnesiumMg[1], "mg");
+  micro("Vitamin D", day.vitaminDIu, m.vitaminDIuFloor, null, "IU");
+  micro("Calcium", day.calciumMg, m.calciumMg, null, "mg");
+  micro("Omega-3 EPA+DHA", day.omega3G, m.omega3G[0], m.omega3G[1], "g");
+  return scores;
+}
+
+export interface NutritionWeekScore {
+  loggedDays: number;
+  /** Average status counts across logged days, per nutrient. */
+  byNutrient: { nutrient: string; met: number; low: number; high: number; notLogged: number }[];
+}
+
+export function scoreNutritionWeek(days: NutritionDay[], targets: NutritionTargets): NutritionWeekScore {
+  const map = new Map<string, { nutrient: string; met: number; low: number; high: number; notLogged: number }>();
+  for (const day of days) {
+    for (const s of scoreNutritionDay(day, targets)) {
+      const row = map.get(s.nutrient) ?? { nutrient: s.nutrient, met: 0, low: 0, high: 0, notLogged: 0 };
+      if (s.status === "met") row.met++;
+      else if (s.status === "low") row.low++;
+      else if (s.status === "high") row.high++;
+      else row.notLogged++;
+      map.set(s.nutrient, row);
+    }
+  }
+  return { loggedDays: days.length, byNutrient: [...map.values()] };
+}

@@ -1,4 +1,4 @@
-// SightLine app shell (Phase 2 MVP).
+// SightLine app shell (Phase 3).
 //
 // Screens: Today, Goals, Check-ins, Fasting, Injuries, Equipment,
 // Data, Settings. All logic comes from the platform-independent
@@ -11,17 +11,25 @@
 
 import "./styles.css";
 import {
+  assessStage,
   computeNutritionTargets,
   computeReadiness,
   cronometerCsvToNutritionDays,
+  encodeWorkoutFit,
   estimateExpenditure,
+  findRecurrence,
   formatStatement,
   garminDayBundleToObservations,
   manualObservations,
   normalizeGoals,
   planWeek,
+  preventionAllocations,
   resolveObservations,
+  scoreNutritionWeek,
+  sessionToWorkout,
   teladocExtractionToCanonical,
+  validatePainReport,
+  workoutCard,
   METRIC_RANGES,
 } from "../engine/src/index.ts";
 import type {
@@ -138,11 +146,28 @@ function viewToday(root: HTMLElement): void {
   root.append(tierCard);
 
   if (todaysSession) {
+    const workout = sessionToWorkout(todaysSession);
     root.append(
       card(
         "Today's session",
         h("p", { class: "session-kind" }, `${todaysSession.kind} — ${todaysSession.durationMin} min`),
         ...todaysSession.reasons.map((r) => h("p", { class: "signal" }, r)),
+        workout
+          ? h("pre", { class: "workout-card" }, workoutCard(workout))
+          : h("p", { class: "signal" }, "Practice session — not a workout, no export."),
+        workout
+          ? button("Download FIT workout file (for GARMIN/NewFiles)", () => {
+              const bytes = encodeWorkoutFit(workout);
+              const blob = new Blob([bytes as BlobPart], { type: "application/octet-stream" });
+              const url = URL.createObjectURL(blob);
+              const a = h("a", { href: url, download: `${workout.id}.fit` });
+              document.body.append(a);
+              a.click();
+              a.remove();
+              setTimeout(() => URL.revokeObjectURL(url), 5000);
+              setNotice("FIT file downloaded. Copy it to the watch's GARMIN/NewFiles folder by USB to load the workout.");
+            })
+          : null,
       ),
     );
   } else {
@@ -200,6 +225,16 @@ function viewToday(root: HTMLElement): void {
             `${i.bodyArea}: pain ${i.pain0to10}/10, stage ${i.stage}, status ${i.status}` +
             (i.redFlags.length > 0 ? ` — RED FLAGS: ${i.redFlags.join(", ")}. Programming for the affected patterns is stopped; get this evaluated in person.` : "")),
         ),
+      ),
+    );
+  }
+
+  const prevention = preventionAllocations(store.injuries);
+  if (prevention.length > 0) {
+    root.append(
+      card(
+        "Injury prevention (maintenance)",
+        ...prevention.map((p) => h("p", { class: "signal" }, `${p.item} — ${p.timesPerWeek}×/week. ${p.reason}`)),
       ),
     );
   }
@@ -413,6 +448,53 @@ function viewInjuries(root: HTMLElement): void {
         h("p", { class: "signal" }, "A resolved injury stays in the profile as a standing risk entry (spec §7.4) — deleting removes that history." ),
       ),
     );
+
+    const active = store.injuries.filter((i) => i.status !== "resolved");
+    if (active.length > 0) {
+      root.append(
+        card(
+          "Stage assessment & pain reports",
+          h("p", { class: "signal" }, "Stages move on criteria, not calendar: two calm reports (pain ≤2 during, no worse next morning) advance; a flare steps back. Log a report after sessions that load the affected patterns."),
+          ...active.flatMap((inj) => {
+            const assessment = assessStage(inj, store.injuryReports);
+            const during = numInput("", "1");
+            const morning = numInput("", "1");
+            const rows: Child[] = [
+              h("p", { class: "session-kind" }, `${inj.bodyArea} — stage ${inj.stage}: ${assessment.action}`),
+              ...assessment.reasons.map((r) => h("p", { class: "signal" }, r)),
+              h("div", { class: "form" },
+                labeledInput("Pain during (0–10)", during),
+                labeledInput("Pain next morning (0–10)", morning),
+                button("Log pain report", () => {
+                  try {
+                    const rep = {
+                      injuryId: inj.id,
+                      date: todayLocal(),
+                      painDuring: Number(during.value),
+                      painNextMorning: Number(morning.value),
+                    };
+                    validatePainReport(rep);
+                    store.injuryReports.push(rep);
+                    save();
+                    render();
+                  } catch (err) {
+                    setNotice(`Pain report rejected: ${err instanceof Error ? err.message : String(err)}`);
+                  }
+                }),
+                assessment.action !== "hold" && assessment.toStage !== inj.stage
+                  ? button(`Apply: move to stage ${assessment.toStage}`, () => {
+                      inj.stage = assessment.toStage;
+                      save();
+                      render();
+                    })
+                  : null,
+              ),
+            ];
+            return rows;
+          }),
+        ),
+      );
+    }
   }
 
   const area = textInput("", 60);
@@ -464,6 +546,18 @@ function viewInjuries(root: HTMLElement): void {
             professionalNotes: null,
             provenance: prov("in-app-log", todayLocal()),
           };
+          const recurrence = findRecurrence(store.injuries, record.bodyArea);
+          if (recurrence) {
+            recurrence.status = "active";
+            recurrence.stage = Math.max(1, recurrence.stage - 1) as 1 | 2 | 3;
+            recurrence.pain0to10 = record.pain0to10;
+            recurrence.onsetDate = record.onsetDate;
+            recurrence.onsetDescription = record.onsetDescription;
+            recurrence.redFlags = record.redFlags;
+            save();
+            setNotice(`This matches your resolved ${recurrence.bodyArea} injury — that record has been reopened at stage ${recurrence.stage} (history kept) instead of starting a duplicate.`);
+            return;
+          }
           store.injuries.push(record);
           save();
           setNotice(record.redFlags.length > 0
@@ -524,6 +618,35 @@ function viewData(root: HTMLElement): void {
     h("p", { class: "signal" }, "Every value carries its source and timestamps. When two sources report the same metric for a day, both are kept and the declared source priority decides what the engine reads (Garmin is the step source of record)."),
   );
   root.append(counts);
+
+  const recentNutrition = [...store.nutrition].sort((a, b) => a.date.localeCompare(b.date)).slice(-7);
+  if (recentNutrition.length > 0) {
+    const latestWeight = [...resolveObservations(store.observations)]
+      .filter((o) => o.metric === "weight-kg")
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .pop();
+    const expenditure = estimateExpenditure(store.observations, store.nutrition);
+    const targets = computeNutritionTargets({
+      goals: normalizeGoals(store.goals),
+      bodyWeightKg: latestWeight ? latestWeight.value : null,
+      expenditureKcal: expenditure.kcalPerDay,
+      fastingToday: false,
+    });
+    if (targets.kcal !== null) {
+      const weekScore = scoreNutritionWeek(recentNutrition, targets);
+      root.append(
+        card(
+          "Nutrition scoring (last 7 logged days vs current targets)",
+          h("p", { class: "signal" }, "A nutrient missing from a log counts as not-logged, never as zero."),
+          ...weekScore.byNutrient.map((n) =>
+            h("p", { class: "signal" }, `${n.nutrient}: met ${n.met} · low ${n.low} · high ${n.high} · not logged ${n.notLogged} (of ${weekScore.loggedDays} days)`),
+          ),
+        ),
+      );
+    } else {
+      root.append(card("Nutrition scoring", h("p", {}, "Not scored: targets need a current weight and an expenditure estimate (logged nutrition days plus a weight series).")));
+    }
+  }
 
   const metric = selectInput(Object.keys(METRIC_RANGES).map((m) => [m, m] as [string, string]), "weight-kg");
   const value = numInput();
