@@ -19,7 +19,7 @@ jobs:
             bundles: nsis,msi
             artifact: tauri-windows
           - name: macOS (Apple Silicon)
-            platform: macos-26
+            platform: macos-15
             bundles: dmg,app
             artifact: tauri-macos-arm64
           - name: Linux x64
